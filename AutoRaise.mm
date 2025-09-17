@@ -28,7 +28,7 @@
 #include <Carbon/Carbon.h>
 #include <libproc.h>
 
-#define AUTORAISE_VERSION "5.5"
+#define AUTORAISE_VERSION "5.6"
 #define STACK_THRESHOLD 20
 
 #ifdef EXPERIMENTAL_FOCUS_FIRST
@@ -50,6 +50,7 @@
 // we correct the mouse position before determining which window is underneath the mouse.
 #define WINDOW_CORRECTION 3
 #define MENUBAR_CORRECTION 8
+#define SCREEN_EDGE_CORRECTION
 static CGPoint oldCorrectedPoint = {0, 0};
 
 // An activate delay of about 10 microseconds is just high enough to ensure we always
@@ -126,6 +127,7 @@ static NSString * const Untitled = @"Untitled"; // OSX Email search
 static NSString * const Zim = @"Zim";
 static NSString * const XQuartz = @"XQuartz";
 static NSString * const Finder = @"Finder";
+static NSString * const Pake = @"pake";
 static NSString * const NoTitle = @"";
 static CGPoint desktopOrigin = {0, 0};
 static CGPoint oldPoint = {0, 0};
@@ -653,8 +655,11 @@ inline bool is_main_window(AXUIElementRef _app, AXUIElementRef _window, bool chr
 
 inline bool is_pwa(NSString * bundleIdentifier) {
     NSArray * components = [bundleIdentifier componentsSeparatedByString: @"."];
-    bool pwa = components.count > 4 && [pwas containsObject: components[2]] && [components[3] isEqual: @"app"];
+    bool pake = components.count == 3 && [components[1] isEqual: Pake];
+    bool pwa = pake || (components.count > 4 &&
+        [pwas containsObject: components[2]] && [components[3] isEqual: @"app"]);
     if (verbose && pwa) { NSLog(@"PWA: %@", components[2]); }
+    return pwa;
 }
 
 //-----------------------------------------------notifications----------------------------------------------
@@ -965,10 +970,11 @@ void onTick() {
     mouseMoved = mouseMoved || propagateMouseMoved;
     propagateMouseMoved = false;
 
-    // delayCount = 0 -> warp only
 #ifdef FOCUS_FIRST
+    // !delayCount && !raiseDelayCount -> warp only (no focus, no raise)
     if (altTaskSwitcher && !delayCount && !raiseDelayCount) { return; }
 #else
+    // !delayCount -> warp only (no raise)
     if (altTaskSwitcher && !delayCount) { return; }
 #endif
 
@@ -977,50 +983,46 @@ void onTick() {
     // delayTicks = n -> delay started
     if (delayTicks > 1) { delayTicks--; }
 
-#ifdef FOCUS_FIRST
-    if (!delayCount || raiseDelayCount == 1) {
-#endif
-        if (@available(macOS 12.00, *)) {
-            // the correction should be applied before we return
-            // under certain conditions in the code after it. This
-            // ensures oldCorrectedPoint always has a recent value.
-            if (mouseMoved) {
-                NSScreen * screen = findScreen(mousePoint);
-                mousePoint.x += mouse_x_diff > 0 ? WINDOW_CORRECTION : -WINDOW_CORRECTION;
-                mousePoint.y += mouse_y_diff > 0 ? WINDOW_CORRECTION : -WINDOW_CORRECTION;
-                if (screen) {
-                    NSScreen * main_screen = NSScreen.screens[0];
-                    float screenOriginX = NSMinX(screen.frame) - NSMinX(main_screen.frame);
-                    float screenOriginY = NSMaxY(main_screen.frame) - NSMaxY(screen.frame);
-
-                    if (oldPoint.x > screenOriginX + NSWidth(screen.frame) - WINDOW_CORRECTION) {
-                        if (verbose) { NSLog(@"Screen edge correction"); }
-                        mousePoint.x = screenOriginX + NSWidth(screen.frame) - 1;
-                    } else if (oldPoint.x < screenOriginX + WINDOW_CORRECTION - 1) {
-                        if (verbose) { NSLog(@"Screen edge correction"); }
-                        mousePoint.x = screenOriginX + 1;
-                    }
-
-                    if (oldPoint.y > screenOriginY + NSHeight(screen.frame) - WINDOW_CORRECTION) {
-                        if (verbose) { NSLog(@"Screen edge correction"); }
-                        mousePoint.y = screenOriginY + NSHeight(screen.frame) - 1;
-                    } else {
-                        float menuBarHeight =
-                            fmax(0, NSMaxY(screen.frame) - NSMaxY(screen.visibleFrame) - 1);
-                        if (mousePoint.y < screenOriginY + menuBarHeight + MENUBAR_CORRECTION) {
-                            if (verbose) { NSLog(@"Menu bar correction"); }
-                            mousePoint.y = screenOriginY;
-                        }
-                    }
+    if (@available(macOS 15.00, *)) {
+        // the correction should be applied before we return
+        // under certain conditions in the code after it. This
+        // ensures oldCorrectedPoint always has a recent value.
+        if (mouseMoved) {
+            mousePoint.x -= WINDOW_CORRECTION;
+            mousePoint.y -= WINDOW_CORRECTION;
+            NSScreen * screen = findScreen(mousePoint);
+            if (screen) {
+                NSScreen * main_screen = NSScreen.screens[0];
+                float screenOriginY = NSMaxY(main_screen.frame) - NSMaxY(screen.frame);
+#ifdef SCREEN_EDGE_CORRECTION
+                float screenOriginX = NSMinX(screen.frame) - NSMinX(main_screen.frame);
+                if (oldPoint.x > screenOriginX + NSWidth(screen.frame) - WINDOW_CORRECTION) {
+                    mousePoint.x = screenOriginX + NSWidth(screen.frame) - 1;
+                    if (verbose) { NSLog(@"Screen edge correction: %lf", mousePoint.x); }
+                } else if (oldPoint.x < screenOriginX + WINDOW_CORRECTION - 1) {
+                    mousePoint.x = screenOriginX + 1;
+                    if (verbose) { NSLog(@"Screen edge correction: %lf", mousePoint.x); }
                 }
-                oldCorrectedPoint = mousePoint;
-            } else {
-                mousePoint = oldCorrectedPoint;
-            }
-        }
-#ifdef FOCUS_FIRST
-    }
+
+                if (oldPoint.y > screenOriginY + NSHeight(screen.frame) - WINDOW_CORRECTION) {
+                    if (verbose) { NSLog(@"Screen edge correction"); }
+                    mousePoint.y = screenOriginY + NSHeight(screen.frame) - 1;
+                } else {
 #endif
+                float menuBarHeight = fmax(0, NSMaxY(screen.frame) - NSMaxY(screen.visibleFrame) - 1);
+                if (mousePoint.y < screenOriginY + menuBarHeight + MENUBAR_CORRECTION) {
+                    if (verbose) { NSLog(@"Menu bar correction"); }
+                    mousePoint.y = screenOriginY;
+                }
+#ifdef SCREEN_EDGE_CORRECTION
+                }
+#endif
+            }
+            oldCorrectedPoint = mousePoint;
+        } else {
+            mousePoint = oldCorrectedPoint;
+        }
+    }
 
     if (ignoreTimes) {
         ignoreTimes--;
@@ -1037,12 +1039,14 @@ void onTick() {
             delayTicks = 0;
         }
         spaceHasChanged = false;
+#if !defined FOCUS_FIRST || !defined FOCUS_WITHOUT_MOUSE_STOP
     } else if (delayTicks && mouseMoved) {
         delayTicks = 0;
         // propagate the mouseMoved event
         // to restart the delay if needed
         propagateMouseMoved = true;
         return;
+#endif
     }
 
     // mouseMoved: we have to decide if the window needs raising
@@ -1161,6 +1165,7 @@ void onTick() {
                         if (raiseTimes) { raiseTimes--; }
                         else { raiseTimes = 3; }
 #ifdef FOCUS_FIRST
+                        // focus first and raise soon after
                         if (delayCount && raiseDelayCount != 1) {
                             OSStatus error = GetProcessForPID(mouseWindow_pid, &mouseWindow_psn);
                             if (!error) {
@@ -1189,6 +1194,7 @@ void onTick() {
                             }
                         } else {
 #endif
+                        // focus disabled or raise immediately
                         raiseAndActivate(_mouseWindow, mouseWindow_pid);
 #ifdef FOCUS_FIRST
                         }
@@ -1214,29 +1220,32 @@ void onTick() {
 }
 
 CGEventRef eventTapHandler(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void *userInfo) {
+    CGEventFlags flags = CGEventGetFlags(event);
+    bool commandPressed = (flags & TASK_SWITCHER_MODIFIER_KEY) == TASK_SWITCHER_MODIFIER_KEY;
+
     static bool commandTabPressed = false;
-    if (type == kCGEventFlagsChanged && commandTabPressed) {
+    if (!commandPressed && commandTabPressed) {
+        commandTabPressed = false;
         activated_by_task_switcher = true;
         ignoreTimes = 3;
     }
 
     static bool commandGravePressed = false;
-    if (type == kCGEventFlagsChanged && commandGravePressed) {
+    if (!commandPressed && commandGravePressed) {
+        commandGravePressed = false;
         activated_by_task_switcher = true;
         ignoreTimes = 3;
         [workspaceWatcher onAppActivated];
     }
 
-    commandTabPressed = false;
-    commandGravePressed = false;
     if (type == kCGEventKeyDown) {
         CGKeyCode keycode = (CGKeyCode) CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
         if (keycode == kVK_Tab) {
             CGEventFlags flags = CGEventGetFlags(event);
-            commandTabPressed = (flags & TASK_SWITCHER_MODIFIER_KEY) == TASK_SWITCHER_MODIFIER_KEY;
+            commandTabPressed = commandTabPressed || commandPressed;
         } else if (warpMouse && keycode == kVK_ANSI_Grave) {
             CGEventFlags flags = CGEventGetFlags(event);
-            commandGravePressed = (flags & TASK_SWITCHER_MODIFIER_KEY) == TASK_SWITCHER_MODIFIER_KEY;
+            commandGravePressed = commandGravePressed || commandPressed;
         }
     } else if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
         if (verbose) { NSLog(@"Got event tap disabled event, re-enabling..."); }
@@ -1373,9 +1382,15 @@ int main(int argc, const char * argv[]) {
         if (verbose) { NSLog(@"System cursor scale: %f", oldScale); }
 
         CFRunLoopSourceRef runLoopSource = NULL;
-        eventTap = CGEventTapCreate(kCGSessionEventTap, kCGHeadInsertEventTap, kCGEventTapOptionDefault,
-            CGEventMaskBit(kCGEventKeyDown) | CGEventMaskBit(kCGEventFlagsChanged),
-            eventTapHandler, NULL);
+        eventTap = CGEventTapCreate(
+            kCGSessionEventTap,
+            kCGHeadInsertEventTap,
+            kCGEventTapOptionListenOnly,
+            CGEventMaskBit(kCGEventKeyDown) |
+            CGEventMaskBit(kCGEventFlagsChanged),
+            eventTapHandler,
+            NULL
+        );
         if (eventTap) {
             runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0);
             if (runLoopSource) {

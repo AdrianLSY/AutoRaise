@@ -41,6 +41,9 @@ and use the following commands:
   Or not raising at all if the -delay setting equals 0. This is an experimental feature. It relies on undocumented private API
   calls. *As such there is absolutely no guarantee it will be supported in future OSX versions*.
 
+  * FOCUS_WITHOUT_MOUSE_STOP: Only applies if the EXPERIMENTAL_FOCUS_FIRST flag has been enabled as well. When enabled, the
+  hovered window will be focused immediately after the specified focus delay has passed without requiring the mouse to stop.
+
 Example advanced compilation command:
 
     make CXXFLAGS="-DOLD_ACTIVATION_METHOD -DEXPERIMENTAL_FOCUS_FIRST" && make install
@@ -156,7 +159,7 @@ like so:
 
 The output should look something like this:
 
-    v5.5 by sbmpost(c) 2025, usage:
+    v5.6 by sbmpost(c) 2025, usage:
 
     AutoRaise
       -pollMillis <20, 30, 40, 50, ...>
