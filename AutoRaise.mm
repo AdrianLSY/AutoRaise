@@ -998,10 +998,10 @@ void onTick() {
                 float screenOriginX = NSMinX(screen.frame) - NSMinX(main_screen.frame);
                 if (oldPoint.x > screenOriginX + NSWidth(screen.frame) - WINDOW_CORRECTION) {
                     mousePoint.x = screenOriginX + NSWidth(screen.frame) - 1;
-                    if (verbose) { NSLog(@"Screen edge correction: %lf", mousePoint.x); }
+                    if (verbose) { NSLog(@"Screen edge correction"); }
                 } else if (oldPoint.x < screenOriginX + WINDOW_CORRECTION - 1) {
                     mousePoint.x = screenOriginX + 1;
-                    if (verbose) { NSLog(@"Screen edge correction: %lf", mousePoint.x); }
+                    if (verbose) { NSLog(@"Screen edge correction"); }
                 }
 
                 if (oldPoint.y > screenOriginY + NSHeight(screen.frame) - WINDOW_CORRECTION) {
