@@ -988,9 +988,9 @@ void onTick() {
         // under certain conditions in the code after it. This
         // ensures oldCorrectedPoint always has a recent value.
         if (mouseMoved) {
+            NSScreen * screen = findScreen(mousePoint);
             mousePoint.x -= WINDOW_CORRECTION;
             mousePoint.y -= WINDOW_CORRECTION;
-            NSScreen * screen = findScreen(mousePoint);
             if (screen) {
                 NSScreen * main_screen = NSScreen.screens[0];
                 float screenOriginY = NSMaxY(main_screen.frame) - NSMaxY(screen.frame);
