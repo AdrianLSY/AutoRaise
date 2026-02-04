@@ -81,6 +81,8 @@ can only be stopped via "Activity Monitor" or the AppleScript provided near the 
 
   - ignoreSpaceChanged: Do not immediately raise/focus after a space change. The default is false.
 
+  - invertDisableKey: Makes the disable AutoRaise key behave in the opposite way. The default is false.
+
   - invertIgnoreApps: Turns the ignoreApps parameter into an includeApps parameter. The default is false.
 
   - ignoreApps: Comma separated list of apps for which you would like to disable focus/raise.
@@ -107,6 +109,7 @@ AutoRaise can read these parameters from a configuration file. To make this happ
     scale=2.5
     altTaskSwitcher=false
     ignoreSpaceChanged=false
+    invertDisableKey=false
     invertIgnoreApps=false
     ignoreApps="IntelliJ IDEA,WebStorm"
     ignoreTitles="\\s\\| Microsoft Teams,..."
@@ -159,7 +162,7 @@ like so:
 
 The output should look something like this:
 
-    v5.6 by sbmpost(c) 2025, usage:
+    v5.6 by sbmpost(c) 2026, usage:
 
     AutoRaise
       -pollMillis <20, 30, 40, 50, ...>
@@ -168,6 +171,7 @@ The output should look something like this:
       -warpX <0.5> -warpY <0.5> -scale <2.0>
       -altTaskSwitcher <true|false>
       -ignoreSpaceChanged <true|false>
+      -invertDisableKey <true|false>
       -invertIgnoreApps <true|false>
       -ignoreApps "<App1,App2, ...>"
       -ignoreTitles "<Regex1, Regex2, ...>"
@@ -181,6 +185,7 @@ The output should look something like this:
       * delay: 0ms
       * focusDelay: disabled
       * ignoreSpaceChanged: false
+      * invertDisableKey: false
       * invertIgnoreApps: false
       * disableKey: control
       * verbose: true
