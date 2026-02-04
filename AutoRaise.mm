@@ -1,5 +1,5 @@
 /*
- * AutoRaise - Copyright (C) 2025 sbmpost
+ * AutoRaise - Copyright (C) 2026 sbmpost
  * Some pieces of the code are based on
  * metamove by jmgao as part of XFree86
  *
@@ -116,6 +116,7 @@ static NSArray * pwas = @[
     @"Opera",
     @"edgemac"
 ];
+static NSArray * jetBrainsAppsRaisingOnFocus = @[@"IntelliJ IDEA", @"PyCharm", @"WebStorm"];
 static NSString * const DockBundleId = @"com.apple.dock";
 static NSString * const FinderBundleId = @"com.apple.finder";
 static NSString * const LittleSnitchBundleId = @"at.obdev.littlesnitch";
@@ -983,7 +984,7 @@ void onTick() {
     // delayTicks = n -> delay started
     if (delayTicks > 1) { delayTicks--; }
 
-    if (@available(macOS 15.00, *)) {
+    if (@available(macOS 12.00, *)) {
         // the correction should be applied before we return
         // under certain conditions in the code after it. This
         // ensures oldCorrectedPoint always has a recent value.
@@ -1082,6 +1083,9 @@ void onTick() {
             if (AXUIElementGetPid(_mouseWindow, &mouseWindow_pid) == kAXErrorSuccess) {
                 bool needs_raise = !invertIgnoreApps;
                 AXUIElementRef _mouseWindowApp = AXUIElementCreateApplication(mouseWindow_pid);
+#ifdef FOCUS_FIRST
+                bool workaround_for_jetbrains_apps_raising_on_focus = false;
+#endif
                 if (needs_raise && titleEquals(_mouseWindow, @[NoTitle, Untitled])) {
                     needs_raise = is_main_window(_mouseWindowApp, _mouseWindow, is_pwa(
                         [NSRunningApplication runningApplicationWithProcessIdentifier:
@@ -1103,6 +1107,10 @@ void onTick() {
                             }
                         }
                     }
+#ifdef FOCUS_FIRST
+                    workaround_for_jetbrains_apps_raising_on_focus =
+                        titleEquals(_mouseWindowApp, jetBrainsAppsRaisingOnFocus);
+#endif
                 }
                 CFRelease(_mouseWindowApp);
                 CGWindowID mouseWindow_id;
@@ -1131,6 +1139,9 @@ void onTick() {
                             needs_raise = needs_raise && !contained_within(_focusedWindow, _mouseWindow);
 #ifdef FOCUS_FIRST
                         } else {
+                            if (workaround_for_jetbrains_apps_raising_on_focus) {
+                                needs_raise = needs_raise && !contained_within(_focusedWindow, _mouseWindow);
+                            }
                             needs_raise = needs_raise && is_main_window(_frontmostApp, _focusedWindow,
                                 is_pwa(frontmostApp.bundleIdentifier)) && (mouseWindow_pid != frontmost_pid ||
                                 !contained_within(_focusedWindow, _mouseWindow));
