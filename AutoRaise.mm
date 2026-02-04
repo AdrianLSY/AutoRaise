@@ -134,6 +134,7 @@ static CGPoint desktopOrigin = {0, 0};
 static CGPoint oldPoint = {0, 0};
 static bool propagateMouseMoved = false;
 static bool ignoreSpaceChanged = false;
+static bool invertDisableKey = false;
 static bool invertIgnoreApps = false;
 static bool spaceHasChanged = false;
 static bool appWasActivated = false;
@@ -762,6 +763,7 @@ const NSString *kVerbose = @"verbose";
 const NSString *kAltTaskSwitcher = @"altTaskSwitcher";
 const NSString *kIgnoreSpaceChanged = @"ignoreSpaceChanged";
 const NSString *kStayFocusedBundleIds = @"stayFocusedBundleIds";
+const NSString *kInvertDisableKey = @"invertDisableKey";
 const NSString *kInvertIgnoreApps = @"invertIgnoreApps";
 const NSString *kIgnoreApps = @"ignoreApps";
 const NSString *kIgnoreTitles = @"ignoreTitles";
@@ -771,12 +773,12 @@ const NSString *kDisableKey = @"disableKey";
 #ifdef FOCUS_FIRST
 const NSString *kFocusDelay = @"focusDelay";
 NSArray *parametersDictionary = @[kDelay, kWarpX, kWarpY, kScale, kVerbose, kAltTaskSwitcher,
-    kFocusDelay, kIgnoreSpaceChanged, kInvertIgnoreApps, kIgnoreApps, kIgnoreTitles,
-    kStayFocusedBundleIds, kDisableKey, kMouseDelta, kPollMillis];
+    kFocusDelay, kIgnoreSpaceChanged, kInvertDisableKey, kInvertIgnoreApps, kIgnoreApps,
+    kIgnoreTitles, kStayFocusedBundleIds, kDisableKey, kMouseDelta, kPollMillis];
 #else
 NSArray *parametersDictionary = @[kDelay, kWarpX, kWarpY, kScale, kVerbose, kAltTaskSwitcher,
-    kIgnoreSpaceChanged, kInvertIgnoreApps, kIgnoreApps, kIgnoreTitles, kStayFocusedBundleIds,
-    kDisableKey, kMouseDelta, kPollMillis];
+    kIgnoreSpaceChanged, kInvertDisableKey, kInvertIgnoreApps, kIgnoreApps,
+    kIgnoreTitles, kStayFocusedBundleIds, kDisableKey, kMouseDelta, kPollMillis];
 #endif
 NSMutableDictionary *parameters = [[NSMutableDictionary alloc] init];
 
@@ -1065,6 +1067,7 @@ void onTick() {
             CGEventFlags flags = CGEventGetFlags(_keyDownEvent);
             if (_keyDownEvent) { CFRelease(_keyDownEvent); }
             abort = (flags & disableKey) == disableKey;
+            abort = abort != invertDisableKey;
         }
 
         NSRunningApplication *frontmostApp = [[NSWorkspace sharedWorkspace] frontmostApplication];
@@ -1282,6 +1285,7 @@ int main(int argc, const char * argv[]) {
         pollMillis         = [parameters[kPollMillis] intValue];
         ignoreSpaceChanged = [parameters[kIgnoreSpaceChanged] boolValue];
         invertIgnoreApps   = [parameters[kInvertIgnoreApps] boolValue];
+        invertDisableKey   = [parameters[kInvertDisableKey] boolValue];
 
         printf("\nv%s by sbmpost(c) 2025, usage:\n\nAutoRaise\n", AUTORAISE_VERSION);
         printf("  -pollMillis <20, 30, 40, 50, ...>\n");
@@ -1292,6 +1296,7 @@ int main(int argc, const char * argv[]) {
         printf("  -warpX <0.5> -warpY <0.5> -scale <2.0>\n");
         printf("  -altTaskSwitcher <true|false>\n");
         printf("  -ignoreSpaceChanged <true|false>\n");
+        printf("  -invertDisableKey <true|false>\n");
         printf("  -invertIgnoreApps <true|false>\n");
         printf("  -ignoreApps \"<App1,App2,...>\"\n");
         printf("  -ignoreTitles \"<Regex1,Regex2,...>\"\n");
@@ -1324,6 +1329,7 @@ int main(int argc, const char * argv[]) {
         }
 
         printf("  * ignoreSpaceChanged: %s\n", ignoreSpaceChanged ? "true" : "false");
+        printf("  * invertDisableKey: %s\n", invertDisableKey ? "true" : "false");
         printf("  * invertIgnoreApps: %s\n", invertIgnoreApps ? "true" : "false");
 
         NSMutableArray * ignoreA;
