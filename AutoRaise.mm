@@ -50,7 +50,6 @@
 // we correct the mouse position before determining which window is underneath the mouse.
 #define WINDOW_CORRECTION 3
 #define MENUBAR_CORRECTION 8
-#define SCREEN_EDGE_CORRECTION
 static CGPoint oldCorrectedPoint = {0, 0};
 
 // An activate delay of about 10 microseconds is just high enough to ensure we always
@@ -114,9 +113,10 @@ static NSArray * pwas = @[
     @"Vivaldi",
     @"Brave",
     @"Opera",
-    @"edgemac"
+    @"edgemac",
+    @"helium"
 ];
-static NSArray * jetBrainsAppsRaisingOnFocus = @[@"IntelliJ IDEA", @"PyCharm", @"WebStorm"];
+static NSArray * AppsRaisingOnFocus = @[@"IntelliJ IDEA", @"PyCharm", @"WebStorm", @"Arc", @"Dia"];
 static NSString * const DockBundleId = @"com.apple.dock";
 static NSString * const FinderBundleId = @"com.apple.finder";
 static NSString * const LittleSnitchBundleId = @"at.obdev.littlesnitch";
@@ -997,7 +997,6 @@ void onTick() {
             if (screen) {
                 NSScreen * main_screen = NSScreen.screens[0];
                 float screenOriginY = NSMaxY(main_screen.frame) - NSMaxY(screen.frame);
-#ifdef SCREEN_EDGE_CORRECTION
                 float screenOriginX = NSMinX(screen.frame) - NSMinX(main_screen.frame);
                 if (oldPoint.x > screenOriginX + NSWidth(screen.frame) - WINDOW_CORRECTION) {
                     mousePoint.x = screenOriginX + NSWidth(screen.frame) - 1;
@@ -1011,15 +1010,12 @@ void onTick() {
                     if (verbose) { NSLog(@"Screen edge correction"); }
                     mousePoint.y = screenOriginY + NSHeight(screen.frame) - 1;
                 } else {
-#endif
-                float menuBarHeight = fmax(0, NSMaxY(screen.frame) - NSMaxY(screen.visibleFrame) - 1);
-                if (mousePoint.y < screenOriginY + menuBarHeight + MENUBAR_CORRECTION) {
-                    if (verbose) { NSLog(@"Menu bar correction"); }
-                    mousePoint.y = screenOriginY;
+                    float menuBarHeight = fmax(0, NSMaxY(screen.frame) - NSMaxY(screen.visibleFrame) - 1);
+                    if (mousePoint.y < screenOriginY + menuBarHeight + MENUBAR_CORRECTION) {
+                        if (verbose) { NSLog(@"Menu bar correction"); }
+                        mousePoint.y = screenOriginY;
+                    }
                 }
-#ifdef SCREEN_EDGE_CORRECTION
-                }
-#endif
             }
             oldCorrectedPoint = mousePoint;
         } else {
@@ -1087,7 +1083,7 @@ void onTick() {
                 bool needs_raise = !invertIgnoreApps;
                 AXUIElementRef _mouseWindowApp = AXUIElementCreateApplication(mouseWindow_pid);
 #ifdef FOCUS_FIRST
-                bool workaround_for_jetbrains_apps_raising_on_focus = false;
+                bool workaround_for_apps_raising_on_focus = false;
 #endif
                 if (needs_raise && titleEquals(_mouseWindow, @[NoTitle, Untitled])) {
                     needs_raise = is_main_window(_mouseWindowApp, _mouseWindow, is_pwa(
@@ -1111,8 +1107,7 @@ void onTick() {
                         }
                     }
 #ifdef FOCUS_FIRST
-                    workaround_for_jetbrains_apps_raising_on_focus =
-                        titleEquals(_mouseWindowApp, jetBrainsAppsRaisingOnFocus);
+                    workaround_for_apps_raising_on_focus = titleEquals(_mouseWindowApp, AppsRaisingOnFocus);
 #endif
                 }
                 CFRelease(_mouseWindowApp);
@@ -1142,7 +1137,7 @@ void onTick() {
                             needs_raise = needs_raise && !contained_within(_focusedWindow, _mouseWindow);
 #ifdef FOCUS_FIRST
                         } else {
-                            if (workaround_for_jetbrains_apps_raising_on_focus) {
+                            if (workaround_for_apps_raising_on_focus) {
                                 needs_raise = needs_raise && !contained_within(_focusedWindow, _mouseWindow);
                             }
                             needs_raise = needs_raise && is_main_window(_frontmostApp, _focusedWindow,
@@ -1255,10 +1250,8 @@ CGEventRef eventTapHandler(CGEventTapProxy proxy, CGEventType type, CGEventRef e
     if (type == kCGEventKeyDown) {
         CGKeyCode keycode = (CGKeyCode) CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
         if (keycode == kVK_Tab) {
-            CGEventFlags flags = CGEventGetFlags(event);
             commandTabPressed = commandTabPressed || commandPressed;
         } else if (warpMouse && keycode == kVK_ANSI_Grave) {
-            CGEventFlags flags = CGEventGetFlags(event);
             commandGravePressed = commandGravePressed || commandPressed;
         }
     } else if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
