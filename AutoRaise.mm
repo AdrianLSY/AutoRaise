@@ -50,6 +50,9 @@
 // we correct the mouse position before determining which window is underneath the mouse.
 #define WINDOW_CORRECTION 3
 #define MENUBAR_CORRECTION 8
+#define SCREEN_EDGE_CORRECTION 1 // 1 <= value <= WINDOW_CORRECTION
+// If the mouse position is within WINDOW_CORRECTION pixels of a screen edge,
+// treat it as if it is SCREEN_EDGE_CORRECTION pixels removed from that edge.
 static CGPoint oldCorrectedPoint = {0, 0};
 
 // An activate delay of about 10 microseconds is just high enough to ensure we always
@@ -999,16 +1002,15 @@ void onTick() {
                 float screenOriginY = NSMaxY(main_screen.frame) - NSMaxY(screen.frame);
                 float screenOriginX = NSMinX(screen.frame) - NSMinX(main_screen.frame);
                 if (oldPoint.x > screenOriginX + NSWidth(screen.frame) - WINDOW_CORRECTION) {
-                    mousePoint.x = screenOriginX + NSWidth(screen.frame) - 1;
+                    mousePoint.x = screenOriginX + NSWidth(screen.frame) - SCREEN_EDGE_CORRECTION;
                     if (verbose) { NSLog(@"Screen edge correction"); }
                 } else if (oldPoint.x < screenOriginX + WINDOW_CORRECTION - 1) {
-                    mousePoint.x = screenOriginX + 1;
+                    mousePoint.x = screenOriginX + SCREEN_EDGE_CORRECTION;
                     if (verbose) { NSLog(@"Screen edge correction"); }
                 }
-
                 if (oldPoint.y > screenOriginY + NSHeight(screen.frame) - WINDOW_CORRECTION) {
                     if (verbose) { NSLog(@"Screen edge correction"); }
-                    mousePoint.y = screenOriginY + NSHeight(screen.frame) - 1;
+                    mousePoint.y = screenOriginY + NSHeight(screen.frame) - SCREEN_EDGE_CORRECTION;
                 } else {
                     float menuBarHeight = fmax(0, NSMaxY(screen.frame) - NSMaxY(screen.visibleFrame) - 1);
                     if (mousePoint.y < screenOriginY + menuBarHeight + MENUBAR_CORRECTION) {
