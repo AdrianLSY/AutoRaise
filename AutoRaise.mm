@@ -979,6 +979,7 @@ void onTick() {
 #ifdef FOCUS_FIRST
     // !delayCount && !raiseDelayCount -> warp only (no focus, no raise)
     if (altTaskSwitcher && !delayCount && !raiseDelayCount) { return; }
+    bool focus_first = delayCount && raiseDelayCount != 1;
 #else
     // !delayCount -> warp only (no raise)
     if (altTaskSwitcher && !delayCount) { return; }
@@ -995,19 +996,21 @@ void onTick() {
         // ensures oldCorrectedPoint always has a recent value.
         if (mouseMoved) {
             NSScreen * screen = findScreen(mousePoint);
-            mousePoint.x -= WINDOW_CORRECTION;
-            mousePoint.y -= WINDOW_CORRECTION;
+            mousePoint.x += mouse_x_diff > 0 ? WINDOW_CORRECTION : -WINDOW_CORRECTION;
+            mousePoint.y += mouse_y_diff > 0 ? WINDOW_CORRECTION : -WINDOW_CORRECTION;
             if (screen) {
                 NSScreen * main_screen = NSScreen.screens[0];
-                float screenOriginY = NSMaxY(main_screen.frame) - NSMaxY(screen.frame);
                 float screenOriginX = NSMinX(screen.frame) - NSMinX(main_screen.frame);
+                float screenOriginY = NSMaxY(main_screen.frame) - NSMaxY(screen.frame);
+
                 if (oldPoint.x > screenOriginX + NSWidth(screen.frame) - WINDOW_CORRECTION) {
+                    if (verbose) { NSLog(@"Screen edge correction"); }
                     mousePoint.x = screenOriginX + NSWidth(screen.frame) - SCREEN_EDGE_CORRECTION;
-                    if (verbose) { NSLog(@"Screen edge correction"); }
                 } else if (oldPoint.x < screenOriginX + WINDOW_CORRECTION - 1) {
-                    mousePoint.x = screenOriginX + SCREEN_EDGE_CORRECTION;
                     if (verbose) { NSLog(@"Screen edge correction"); }
+                    mousePoint.x = screenOriginX + SCREEN_EDGE_CORRECTION;
                 }
+
                 if (oldPoint.y > screenOriginY + NSHeight(screen.frame) - WINDOW_CORRECTION) {
                     if (verbose) { NSLog(@"Screen edge correction"); }
                     mousePoint.y = screenOriginY + NSHeight(screen.frame) - SCREEN_EDGE_CORRECTION;
@@ -1041,6 +1044,8 @@ void onTick() {
         }
         spaceHasChanged = false;
 #if !defined FOCUS_FIRST || !defined FOCUS_WITHOUT_MOUSE_STOP
+    // without focus first, always require the mouse to stop moving.
+    // with focus first, also require a mouse stop unless overridden.
     } else if (delayTicks && mouseMoved) {
         delayTicks = 0;
         // propagate the mouseMoved event
@@ -1057,8 +1062,7 @@ void onTick() {
         // don't raise for as long as something is being dragged (resizing a window for instance)
         bool abort = CGEventSourceButtonState(kCGEventSourceStateCombinedSessionState, kCGMouseButtonLeft) ||
             CGEventSourceButtonState(kCGEventSourceStateCombinedSessionState, kCGMouseButtonRight) ||
-            dock_active() ||
-            mc_active();
+            dock_active() || mc_active();
 
         if (!abort && disableKey) {
             CGEventRef _keyDownEvent = CGEventCreateKeyboardEvent(NULL, 0, true);
@@ -1134,21 +1138,18 @@ void onTick() {
                         _AXUIElementGetWindow(_focusedWindow, &focusedWindow_id);
                         needs_raise = mouseWindow_id != focusedWindow_id;
 #ifdef FOCUS_FIRST
-                        if (raiseDelayCount) {
+                        if (!focus_first) {
 #endif
                             needs_raise = needs_raise && !contained_within(_focusedWindow, _mouseWindow);
 #ifdef FOCUS_FIRST
                         } else {
-                            if (workaround_for_apps_raising_on_focus) {
-                                needs_raise = needs_raise && !contained_within(_focusedWindow, _mouseWindow);
-                            }
                             needs_raise = needs_raise && is_main_window(_frontmostApp, _focusedWindow,
-                                is_pwa(frontmostApp.bundleIdentifier)) && (mouseWindow_pid != frontmost_pid ||
-                                !contained_within(_focusedWindow, _mouseWindow));
-                        }
-                        if (needs_raise && delayCount && raiseDelayCount != 1) {
-                            OSStatus error = GetProcessForPID(frontmost_pid, &focusedWindow_psn);
-                            if (!error) { _focusedWindow_psn = &focusedWindow_psn; }
+                                is_pwa(frontmostApp.bundleIdentifier)) && ((mouseWindow_pid != frontmost_pid &&
+                                !workaround_for_apps_raising_on_focus) || !contained_within(_focusedWindow, _mouseWindow));
+                            if (needs_raise) {
+                                OSStatus error = GetProcessForPID(frontmost_pid, &focusedWindow_psn);
+                                if (!error) { _focusedWindow_psn = &focusedWindow_psn; }
+                            }
                         }
 #endif
                         CFRelease(_focusedWindow);
@@ -1176,8 +1177,7 @@ void onTick() {
                         if (raiseTimes) { raiseTimes--; }
                         else { raiseTimes = 3; }
 #ifdef FOCUS_FIRST
-                        // focus first and raise soon after
-                        if (delayCount && raiseDelayCount != 1) {
+                        if (focus_first) {
                             OSStatus error = GetProcessForPID(mouseWindow_pid, &mouseWindow_psn);
                             if (!error) {
                                 bool floating_window = false;
@@ -1193,7 +1193,7 @@ void onTick() {
                                         CFEqual(_element_sub_role, kAXUnknownSubrole);
                                     CFRelease(_element_sub_role);
                                 }
-                                if (!floating_window) {
+                                if (!floating_window && !workaround_for_apps_raising_on_focus) {
                                     // TODO: method below seems unable to focus floating windows
                                     window_manager_focus_window_without_raise(&mouseWindow_psn,
                                         mouseWindow_id, _focusedWindow_psn, focusedWindow_id);
@@ -1205,7 +1205,6 @@ void onTick() {
                             }
                         } else {
 #endif
-                        // focus disabled or raise immediately
                         raiseAndActivate(_mouseWindow, mouseWindow_pid);
 #ifdef FOCUS_FIRST
                         }
@@ -1382,6 +1381,9 @@ int main(int argc, const char * argv[]) {
 #endif
 #ifdef ALTERNATIVE_TASK_SWITCHER
         printf("  * ALTERNATIVE_TASK_SWITCHER\n");
+#endif
+#ifdef FOCUS_WITHOUT_MOUSE_STOP
+        printf("  * FOCUS_WITHOUT_MOUSE_STOP\n");
 #endif
 #endif
         printf("\n");
