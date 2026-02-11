@@ -973,6 +973,7 @@ void onTick() {
 
     bool mouseMoved = fabs(mouse_x_diff) > mouseDelta;
     mouseMoved = mouseMoved || fabs(mouse_y_diff) > mouseDelta;
+    bool mouseStopped = !mouseMoved;
     mouseMoved = mouseMoved || propagateMouseMoved;
     propagateMouseMoved = false;
 
@@ -1046,7 +1047,7 @@ void onTick() {
 #if !defined FOCUS_FIRST || !defined FOCUS_WITHOUT_MOUSE_STOP
     // without focus first, always require the mouse to stop moving.
     // with focus first, also require a mouse stop unless overridden.
-    } else if (delayTicks && mouseMoved) {
+    } else if (!mouseStopped && mouseMoved) {
         delayTicks = 0;
         // propagate the mouseMoved event
         // to restart the delay if needed
@@ -1222,9 +1223,6 @@ void onTick() {
 #ifdef FOCUS_FIRST
             }
 #endif
-        } else {
-            raiseTimes = 0;
-            delayTicks = 0;
         }
     }
 }
