@@ -973,7 +973,9 @@ void onTick() {
 
     bool mouseMoved = fabs(mouse_x_diff) > mouseDelta;
     mouseMoved = mouseMoved || fabs(mouse_y_diff) > mouseDelta;
+#if !defined FOCUS_FIRST || !defined FOCUS_WITHOUT_MOUSE_STOP
     bool mouseStopped = !mouseMoved;
+#endif
     mouseMoved = mouseMoved || propagateMouseMoved;
     propagateMouseMoved = false;
 
@@ -1194,10 +1196,12 @@ void onTick() {
                                         CFEqual(_element_sub_role, kAXUnknownSubrole);
                                     CFRelease(_element_sub_role);
                                 }
-                                if (!floating_window && !workaround_for_apps_raising_on_focus) {
-                                    // TODO: method below seems unable to focus floating windows
-                                    window_manager_focus_window_without_raise(&mouseWindow_psn,
-                                        mouseWindow_id, _focusedWindow_psn, focusedWindow_id);
+                                if (!floating_window) {
+                                    if (!workaround_for_apps_raising_on_focus || raiseDelayCount == 0) {
+                                        // TODO: method below seems unable to focus floating windows
+                                        window_manager_focus_window_without_raise(&mouseWindow_psn,
+                                            mouseWindow_id, _focusedWindow_psn, focusedWindow_id);
+                                    }
                                 } else if (verbose) { NSLog(@"Unable to focus floating window"); }
                                 if (_lastFocusedWindow) { CFRelease(_lastFocusedWindow); }
                                 _lastFocusedWindow = _mouseWindow;
