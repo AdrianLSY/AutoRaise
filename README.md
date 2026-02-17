@@ -41,9 +41,6 @@ and use the following commands:
   Or not raising at all if the -delay setting equals 0. This is an experimental feature. It relies on undocumented private API
   calls. *As such there is absolutely no guarantee it will be supported in future OSX versions*.
 
-  * FOCUS_WITHOUT_MOUSE_STOP: Only applies if the EXPERIMENTAL_FOCUS_FIRST flag has been enabled as well. When enabled, the
-  hovered window will be focused immediately after the specified focus delay has passed without requiring the mouse to stop.
-
 Example advanced compilation command:
 
     make CXXFLAGS="-DOLD_ACTIVATION_METHOD -DEXPERIMENTAL_FOCUS_FIRST" && make install
@@ -61,7 +58,7 @@ can only be stopped via "Activity Monitor" or the AppleScript provided near the 
 
 **Command line usage:**
 
-    ./AutoRaise -pollMillis 50 -delay 1 -focusDelay 0 -warpX 0.5 -warpY 0.1 -scale 2.5 -altTaskSwitcher false -ignoreSpaceChanged false -ignoreApps "App1,App2" -stayFocusedBundleIds "Id1,Id2" -disableKey control -mouseDelta 0.1
+    ./AutoRaise -pollMillis 50 -delay 1 -warpX 0.5 -warpY 0.1 -scale 2.5 -altTaskSwitcher false -requireMouseStop false -ignoreSpaceChanged false -ignoreApps "App1,App2" -ignoreTitles "^window$" -stayFocusedBundleIds "Id1,Id2" -disableKey control -mouseDelta 0.1
 
 *Note*: focusDelay is only supported when compiled with the "EXPERIMENTAL_FOCUS_FIRST" flag.
 
@@ -78,6 +75,8 @@ can only be stopped via "Activity Monitor" or the AppleScript provided near the 
   - scale: Enlarge the mouse for a short period of time after warping it. The default is 2.0. To disable set it to 1.0.
 
   - altTaskSwitcher: Set to true if you use 3rd party tools to switch between applications (other than standard command-tab).
+
+  - requireMouseStop: Require the mouse to stop moving before raise/focus. The default is true.
 
   - ignoreSpaceChanged: Do not immediately raise/focus after a space change. The default is false.
 
@@ -103,16 +102,16 @@ AutoRaise can read these parameters from a configuration file. To make this happ
     #AutoRaise config file
     pollMillis=50
     delay=1
-    focusDelay=0
     warpX=0.5
     warpY=0.1
     scale=2.5
     altTaskSwitcher=false
+    requireMouseStop=true
     ignoreSpaceChanged=false
     invertDisableKey=false
     invertIgnoreApps=false
     ignoreApps="IntelliJ IDEA,WebStorm"
-    ignoreTitles="\\s\\| Microsoft Teams,..."
+    ignoreTitles="\\s\\| Microsoft Teams,^window$,..."
     stayFocusedBundleIds="com.apple.SecurityAgent,..."
     disableKey="control"
     mouseDelta=0.1
@@ -170,6 +169,7 @@ The output should look something like this:
       -focusDelay <0=no-focus, 1=no-delay, 2=50ms, 3=100ms, ...>
       -warpX <0.5> -warpY <0.5> -scale <2.0>
       -altTaskSwitcher <true|false>
+      -requireMouseStop <true|false>
       -ignoreSpaceChanged <true|false>
       -invertDisableKey <true|false>
       -invertIgnoreApps <true|false>
@@ -194,12 +194,12 @@ The output should look something like this:
       * OLD_ACTIVATION_METHOD
       * EXPERIMENTAL_FOCUS_FIRST
 
-    2025-07-14 14:25:56.192 AutoRaise[44780:1615626] AXIsProcessTrusted: YES
-    2025-07-14 14:25:56.216 AutoRaise[44780:1615626] System cursor scale: 1.000000
-    2025-07-14 14:25:56.234 AutoRaise[44780:1615626] Got run loop source: YES
-    2025-07-14 14:25:56.284 AutoRaise[44780:1615626] Mouse window: AutoRaise — AutoRaise -verbose 1
-    2025-07-14 14:25:56.285 AutoRaise[44780:1615626] Focused window: AutoRaise — AutoRaise -verbose 1
-    2025-07-14 14:25:56.287 AutoRaise[44780:1615626] Desktop origin (-1920.000000, -360.000000)
+    2026-02-01 14:25:56.192 AutoRaise[44780:1615626] AXIsProcessTrusted: YES
+    2026-02-01 14:25:56.216 AutoRaise[44780:1615626] System cursor scale: 1.000000
+    2026-02-01 14:25:56.234 AutoRaise[44780:1615626] Got run loop source: YES
+    2026-02-01 14:25:56.284 AutoRaise[44780:1615626] Mouse window: AutoRaise — AutoRaise -verbose 1
+    2026-02-01 14:25:56.285 AutoRaise[44780:1615626] Focused window: AutoRaise — AutoRaise -verbose 1
+    2026-02-01 14:25:56.287 AutoRaise[44780:1615626] Desktop origin (-1920.000000, -360.000000)
     ...
     ...
 

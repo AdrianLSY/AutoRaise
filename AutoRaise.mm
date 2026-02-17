@@ -136,6 +136,7 @@ static NSString * const NoTitle = @"";
 static CGPoint desktopOrigin = {0, 0};
 static CGPoint oldPoint = {0, 0};
 static bool propagateMouseMoved = false;
+static bool requireMouseStop = true;
 static bool ignoreSpaceChanged = false;
 static bool invertDisableKey = false;
 static bool invertIgnoreApps = false;
@@ -764,6 +765,7 @@ const NSString *kWarpY = @"warpY";
 const NSString *kScale = @"scale";
 const NSString *kVerbose = @"verbose";
 const NSString *kAltTaskSwitcher = @"altTaskSwitcher";
+const NSString *kRequireMouseStop = @"requireMouseStop";
 const NSString *kIgnoreSpaceChanged = @"ignoreSpaceChanged";
 const NSString *kStayFocusedBundleIds = @"stayFocusedBundleIds";
 const NSString *kInvertDisableKey = @"invertDisableKey";
@@ -776,11 +778,11 @@ const NSString *kDisableKey = @"disableKey";
 #ifdef FOCUS_FIRST
 const NSString *kFocusDelay = @"focusDelay";
 NSArray *parametersDictionary = @[kDelay, kWarpX, kWarpY, kScale, kVerbose, kAltTaskSwitcher,
-    kFocusDelay, kIgnoreSpaceChanged, kInvertDisableKey, kInvertIgnoreApps, kIgnoreApps,
-    kIgnoreTitles, kStayFocusedBundleIds, kDisableKey, kMouseDelta, kPollMillis];
+    kFocusDelay, kRequireMouseStop, kIgnoreSpaceChanged, kInvertDisableKey, kInvertIgnoreApps,
+    kIgnoreApps, kIgnoreTitles, kStayFocusedBundleIds, kDisableKey, kMouseDelta, kPollMillis];
 #else
 NSArray *parametersDictionary = @[kDelay, kWarpX, kWarpY, kScale, kVerbose, kAltTaskSwitcher,
-    kIgnoreSpaceChanged, kInvertDisableKey, kInvertIgnoreApps, kIgnoreApps,
+    kRequireMouseStop, kIgnoreSpaceChanged, kInvertDisableKey, kInvertIgnoreApps, kIgnoreApps,
     kIgnoreTitles, kStayFocusedBundleIds, kDisableKey, kMouseDelta, kPollMillis];
 #endif
 NSMutableDictionary *parameters = [[NSMutableDictionary alloc] init];
@@ -855,6 +857,7 @@ NSMutableDictionary *parameters = [[NSMutableDictionary alloc] init];
 #endif
         parameters[kDelay] = @"1";
     }
+    if (!parameters[kRequireMouseStop]) { parameters[kRequireMouseStop] = @"true"; }
     if ([parameters[kPollMillis] intValue] < 20) { parameters[kPollMillis] = @"50"; }
     if ([parameters[kMouseDelta] floatValue] < 0) { parameters[kMouseDelta] = @"0"; }
     if ([parameters[kScale] floatValue] < 1) { parameters[kScale] = @"2.0"; }
@@ -1046,16 +1049,12 @@ void onTick() {
             delayTicks = 0;
         }
         spaceHasChanged = false;
-#if !defined FOCUS_FIRST || !defined FOCUS_WITHOUT_MOUSE_STOP
-    // without focus first, always require the mouse to stop moving.
-    // with focus first, also require a mouse stop unless overridden.
-    } else if (!mouseStopped && mouseMoved) {
+    } else if (requireMouseStop && !mouseStopped && mouseMoved) {
         delayTicks = 0;
         // propagate the mouseMoved event
         // to restart the delay if needed
         propagateMouseMoved = true;
         return;
-#endif
     }
 
     // mouseMoved: we have to decide if the window needs raising
@@ -1279,6 +1278,7 @@ int main(int argc, const char * argv[]) {
         altTaskSwitcher    = [parameters[kAltTaskSwitcher] boolValue];
         mouseDelta         = [parameters[kMouseDelta] floatValue];
         pollMillis         = [parameters[kPollMillis] intValue];
+        requireMouseStop   = [parameters[kRequireMouseStop] boolValue];
         ignoreSpaceChanged = [parameters[kIgnoreSpaceChanged] boolValue];
         invertIgnoreApps   = [parameters[kInvertIgnoreApps] boolValue];
         invertDisableKey   = [parameters[kInvertDisableKey] boolValue];
@@ -1291,6 +1291,7 @@ int main(int argc, const char * argv[]) {
 #endif
         printf("  -warpX <0.5> -warpY <0.5> -scale <2.0>\n");
         printf("  -altTaskSwitcher <true|false>\n");
+        printf("  -requireMouseStop <true|false>\n");
         printf("  -ignoreSpaceChanged <true|false>\n");
         printf("  -invertDisableKey <true|false>\n");
         printf("  -invertIgnoreApps <true|false>\n");
@@ -1324,6 +1325,7 @@ int main(int argc, const char * argv[]) {
             printf("  * altTaskSwitcher: %s\n", altTaskSwitcher ? "true" : "false");
         }
 
+        printf("  * requireMouseStop: %s\n", requireMouseStop ? "true" : "false");
         printf("  * ignoreSpaceChanged: %s\n", ignoreSpaceChanged ? "true" : "false");
         printf("  * invertDisableKey: %s\n", invertDisableKey ? "true" : "false");
         printf("  * invertIgnoreApps: %s\n", invertIgnoreApps ? "true" : "false");
