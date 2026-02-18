@@ -86,16 +86,16 @@ extern "C" CGError CGSGetCursorScale(CGSConnectionID connectionId, float *scale)
 extern "C" AXError _AXUIElementGetWindow(AXUIElementRef, CGWindowID *out);
 // Above methods are undocumented and subjective to incompatible changes
 
-static AXObserverRef observer = NULL;
-static uint64_t lastDestroyedMouseWindow_id = 0;
-
 #ifdef FOCUS_FIRST
 static int raiseDelayCount = 0;
 static pid_t lastFocusedWindow_pid;
 static AXUIElementRef _lastFocusedWindow = NULL;
 #endif
 
-CFMachPortRef eventTap = NULL;
+static AXObserverRef axObserver = NULL;
+static uint64_t lastDestroyedMouseWindow_id = kCGNullWindowID;
+
+static CFMachPortRef eventTap = NULL;
 static char pathBuffer[PROC_PIDPATHINFO_MAXSIZE];
 static bool activated_by_task_switcher = false;
 static AXUIElementRef _accessibility_object = AXUIElementCreateSystemWide();
@@ -1098,22 +1098,31 @@ void onTick() {
         if (_mouseWindow) {
             pid_t mouseWindow_pid;
             if (AXUIElementGetPid(_mouseWindow, &mouseWindow_pid) == kAXErrorSuccess) {
-
                 CGWindowID mouseWindow_id;
                 _AXUIElementGetWindow(_mouseWindow, &mouseWindow_id);
-
                 bool mouseWindowPresent = mouseWindow_id != lastDestroyedMouseWindow_id;
                 if (mouseWindowPresent) {
-                    static CGWindowID previous_id = 0;
+                    static CGWindowID previous_id = kCGNullWindowID;
                     if (mouseWindow_id != previous_id) {
-                        if (observer) {
-                            CFRelease(observer);
-                            observer = NULL;
+                        previous_id = mouseWindow_id;
+
+                        lastDestroyedMouseWindow_id = kCGNullWindowID;
+                        raiseTimes = 0;
+                        delayTicks = 0;
+
+                        if (axObserver) {
+                            CFRelease(axObserver);
+                            axObserver = NULL;
                         }
 
-                        AXObserverCreate(mouseWindow_pid, AXCallback, &observer);
+                        AXObserverCreate(
+                            mouseWindow_pid,
+                            AXCallback,
+                            &axObserver
+                        );
+
                         AXObserverAddNotification(
-                            observer,
+                            axObserver,
                             _mouseWindow,
                             kAXUIElementDestroyedNotification,
                             (void *) ((uint64_t) mouseWindow_id)
@@ -1121,18 +1130,17 @@ void onTick() {
 
                         CFRunLoopAddSource(
                             CFRunLoopGetCurrent(),
-                            AXObserverGetRunLoopSource(observer),
+                            AXObserverGetRunLoopSource(axObserver),
                             kCFRunLoopCommonModes
                         );
                     }
-                    previous_id = mouseWindow_id;
-                } else if (verbose) { NSLog(@"Mouse window no longer present"); }
+                } else if (verbose) { NSLog(@"Mouse window not present"); }
 
-                bool needs_raise = !invertIgnoreApps && mouseWindowPresent;
-                AXUIElementRef _mouseWindowApp = AXUIElementCreateApplication(mouseWindow_pid);
 #ifdef FOCUS_FIRST
                 bool workaround_for_apps_raising_on_focus = false;
 #endif
+                bool needs_raise = !invertIgnoreApps && mouseWindowPresent;
+                AXUIElementRef _mouseWindowApp = AXUIElementCreateApplication(mouseWindow_pid);
                 if (needs_raise && titleEquals(_mouseWindow, @[NoTitle, Untitled])) {
                     needs_raise = is_main_window(_mouseWindowApp, _mouseWindow, is_pwa(
                         [NSRunningApplication runningApplicationWithProcessIdentifier:
@@ -1140,7 +1148,6 @@ void onTick() {
                     if (verbose && !needs_raise) { NSLog(@"Excluding window"); }
                 } else if (needs_raise &&
                     titleEquals(_mouseWindow, @[BartenderBar, Zim, AppStoreSearchResults], ignoreTitles)) {
-                    // TODO: make these window title exceptions an ignoreWindowTitles setting.
                     needs_raise = false;
                     if (verbose) { NSLog(@"Excluding window"); }
                 } else if (mouseWindowPresent) {
