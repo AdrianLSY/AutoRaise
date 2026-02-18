@@ -86,6 +86,9 @@ extern "C" CGError CGSGetCursorScale(CGSConnectionID connectionId, float *scale)
 extern "C" AXError _AXUIElementGetWindow(AXUIElementRef, CGWindowID *out);
 // Above methods are undocumented and subjective to incompatible changes
 
+static AXObserverRef observer = NULL;
+static uint64_t lastDestroyedMouseWindow_id = 0;
+
 #ifdef FOCUS_FIRST
 static int raiseDelayCount = 0;
 static pid_t lastFocusedWindow_pid;
@@ -228,7 +231,8 @@ inline void activate(pid_t pid) {
     if (!error) { SetFrontProcessWithOptions(&process, kSetFrontProcessFrontWindowOnly); }
 #else
     // Note activateWithOptions does not work properly on OSX 11.1
-    [NSRunningApplication runningApplicationWithProcessIdentifier: pid];
+    [[NSRunningApplication runningApplicationWithProcessIdentifier: pid]
+        activateWithOptions: 0];
 #endif
 }
 
@@ -964,6 +968,12 @@ bool appActivated() {
     return true;
 }
 
+void AXCallback(AXObserverRef observer, AXUIElementRef _element, CFStringRef notification, void * destroyedMouseWindow_id) {
+    if (CFEqual(notification, kAXUIElementDestroyedNotification)) {
+        lastDestroyedMouseWindow_id = (uint64_t) destroyedMouseWindow_id;
+    }
+}
+
 void onTick() {
     // determine if mouseMoved
     CGEventRef _event = CGEventCreate(NULL);
@@ -1088,7 +1098,37 @@ void onTick() {
         if (_mouseWindow) {
             pid_t mouseWindow_pid;
             if (AXUIElementGetPid(_mouseWindow, &mouseWindow_pid) == kAXErrorSuccess) {
-                bool needs_raise = !invertIgnoreApps;
+
+                CGWindowID mouseWindow_id;
+                _AXUIElementGetWindow(_mouseWindow, &mouseWindow_id);
+
+                bool mouseWindowPresent = mouseWindow_id != lastDestroyedMouseWindow_id;
+                if (mouseWindowPresent) {
+                    static CGWindowID previous_id = 0;
+                    if (mouseWindow_id != previous_id) {
+                        if (observer) {
+                            CFRelease(observer);
+                            observer = NULL;
+                        }
+
+                        AXObserverCreate(mouseWindow_pid, AXCallback, &observer);
+                        AXObserverAddNotification(
+                            observer,
+                            _mouseWindow,
+                            kAXUIElementDestroyedNotification,
+                            (void *) ((uint64_t) mouseWindow_id)
+                        );
+
+                        CFRunLoopAddSource(
+                            CFRunLoopGetCurrent(),
+                            AXObserverGetRunLoopSource(observer),
+                            kCFRunLoopCommonModes
+                        );
+                    }
+                    previous_id = mouseWindow_id;
+                } else if (verbose) { NSLog(@"Mouse window no longer present"); }
+
+                bool needs_raise = !invertIgnoreApps && mouseWindowPresent;
                 AXUIElementRef _mouseWindowApp = AXUIElementCreateApplication(mouseWindow_pid);
 #ifdef FOCUS_FIRST
                 bool workaround_for_apps_raising_on_focus = false;
@@ -1103,7 +1143,7 @@ void onTick() {
                     // TODO: make these window title exceptions an ignoreWindowTitles setting.
                     needs_raise = false;
                     if (verbose) { NSLog(@"Excluding window"); }
-                } else {
+                } else if (mouseWindowPresent) {
                     if (titleEquals(_mouseWindowApp, ignoreApps)) {
                         needs_raise = invertIgnoreApps;
                         if (verbose) {
@@ -1119,7 +1159,6 @@ void onTick() {
 #endif
                 }
                 CFRelease(_mouseWindowApp);
-                CGWindowID mouseWindow_id;
                 CGWindowID focusedWindow_id;
 #ifdef FOCUS_FIRST
                 ProcessSerialNumber mouseWindow_psn;
@@ -1127,7 +1166,6 @@ void onTick() {
                 ProcessSerialNumber * _focusedWindow_psn = NULL;
 #endif
                 if (needs_raise) {
-                    _AXUIElementGetWindow(_mouseWindow, &mouseWindow_id);
                     pid_t frontmost_pid = frontmostApp.processIdentifier;
                     AXUIElementRef _frontmostApp = AXUIElementCreateApplication(frontmost_pid);
                     AXUIElementRef _focusedWindow = NULL;
