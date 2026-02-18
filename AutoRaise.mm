@@ -986,9 +986,7 @@ void onTick() {
 
     bool mouseMoved = fabs(mouse_x_diff) > mouseDelta;
     mouseMoved = mouseMoved || fabs(mouse_y_diff) > mouseDelta;
-#if !defined FOCUS_FIRST || !defined FOCUS_WITHOUT_MOUSE_STOP
     bool mouseStopped = !mouseMoved;
-#endif
     mouseMoved = mouseMoved || propagateMouseMoved;
     propagateMouseMoved = false;
 
@@ -1430,9 +1428,6 @@ int main(int argc, const char * argv[]) {
 #endif
 #ifdef ALTERNATIVE_TASK_SWITCHER
         printf("  * ALTERNATIVE_TASK_SWITCHER\n");
-#endif
-#ifdef FOCUS_WITHOUT_MOUSE_STOP
-        printf("  * FOCUS_WITHOUT_MOUSE_STOP\n");
 #endif
 #endif
         printf("\n");
