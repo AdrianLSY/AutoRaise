@@ -102,6 +102,7 @@ AutoRaise can read these parameters from a configuration file. To make this happ
     #AutoRaise config file
     pollMillis=50
     delay=1
+    focusDelay=0
     warpX=0.5
     warpY=0.1
     scale=2.5
