@@ -1,6 +1,6 @@
 **AutoRaise**
 
-When you hover a window it will be raised to the front (with a delay of your choosing) and gets the focus. There is also an option to warp
+When you hover a window it is raised to the front and gets the focus — instantly, the moment the cursor crosses the window boundary. There is also an option to warp
 the mouse to the center of the activated window when using the cmd-tab or cmd-grave (backtick) key combination.
 See also [on stackoverflow](https://stackoverflow.com/questions/98310/focus-follows-mouse-plus-auto-raise-on-mac-os-x)
 
@@ -18,6 +18,10 @@ See also [on stackoverflow](https://stackoverflow.com/questions/98310/focus-foll
 *Important*: When you enable Accessibility in System Preferences, if you see an older AutoRaise item with balloon icon in the
 Accessibility pane, first remove it **completely** (clicking the minus). Then stop and start AutoRaise by left clicking the balloon
 icon. The item should re-appear so that you can properly enable Accessibility.
+
+**Upgrading from 5.x**
+
+AutoRaise 6.0 replaces the polled timer loop with an event-driven `CGEventTap`. Raises now fire as soon as the cursor crosses a window boundary, with no settle time and no multi-tick countdown. The following options are removed: `-delay`, `-focusDelay`, `-requireMouseStop`, `-mouseDelta`, and the `EXPERIMENTAL_FOCUS_FIRST` compile flag. Existing configurations that reference these keys will emit a warning on startup and be auto-migrated (the config file is rewritten with the deprecated lines stripped, preserving your comments and the ordering of retained keys). Deprecated CLI flags are also warned-and-ignored; AutoRaise continues to run with default behavior.
 
 **Compiling AutoRaise**
 
@@ -37,13 +41,9 @@ and use the following commands:
   application uses a non native graphic technology like GTK or SDL. It could also be a [wine](https://www.winehq.org) application.
   Note this will introduce a deprecation warning.
 
-  * EXPERIMENTAL_FOCUS_FIRST: Enabling this flag adds support for first focusing the hovered window before actually raising it.
-  Or not raising at all if the -delay setting equals 0. This is an experimental feature. It relies on undocumented private API
-  calls. *As such there is absolutely no guarantee it will be supported in future OSX versions*.
-
 Example advanced compilation command:
 
-    make CXXFLAGS="-DOLD_ACTIVATION_METHOD -DEXPERIMENTAL_FOCUS_FIRST" && make install
+    make CXXFLAGS="-DOLD_ACTIVATION_METHOD" && make install
 
 **Running AutoRaise**
 
@@ -58,15 +58,9 @@ can only be stopped via "Activity Monitor" or the AppleScript provided near the 
 
 **Command line usage:**
 
-    ./AutoRaise -pollMillis 50 -delay 1 -warpX 0.5 -warpY 0.1 -scale 2.5 -altTaskSwitcher false -requireMouseStop false -ignoreSpaceChanged false -ignoreApps "App1,App2" -ignoreTitles "^window$" -stayFocusedBundleIds "Id1,Id2" -disableKey control -mouseDelta 0.1
+    ./AutoRaise -pollMillis 8 -warpX 0.5 -warpY 0.1 -scale 2.5 -altTaskSwitcher false -ignoreSpaceChanged false -ignoreApps "App1,App2" -ignoreTitles "^window$" -stayFocusedBundleIds "Id1,Id2" -disableKey control
 
-*Note*: focusDelay is only supported when compiled with the "EXPERIMENTAL_FOCUS_FIRST" flag.
-
-  - pollMillis: How often to poll the mouse position and consider a raise/focus. Lower values increase responsiveness but also CPU load. Minimum = 20 and default = 50.
-
-  - delay: Raise delay, specified in units of pollMillis. Disabled if 0. A delay > 1 requires the mouse to stop for a moment before raising.
-
-  - focusDelay: Focus delay, specified in units of pollMillis. Disabled if 0. A delay > 1 requires the mouse to stop for a moment before focusing.
+  - pollMillis: Minimum milliseconds between raise checks. Lower values increase responsiveness but also CPU load during mouse motion. Minimum = 1, default = 8 (~120 checks per second at sustained motion). With the event-driven architecture, AutoRaise uses zero CPU when the mouse is idle.
 
   - warpX: A Factor between 0 and 1. Makes the mouse jump horizontally to the activated window. By default disabled.
 
@@ -75,8 +69,6 @@ can only be stopped via "Activity Monitor" or the AppleScript provided near the 
   - scale: Enlarge the mouse for a short period of time after warping it. The default is 2.0. To disable set it to 1.0.
 
   - altTaskSwitcher: Set to true if you use 3rd party tools to switch between applications (other than standard command-tab).
-
-  - requireMouseStop: Require the mouse to stop moving before raise/focus. The default is true.
 
   - ignoreSpaceChanged: Do not immediately raise/focus after a space change. The default is false.
 
@@ -92,22 +84,17 @@ can only be stopped via "Activity Monitor" or the AppleScript provided near the 
 
   - disableKey: Set to control, option or disabled. This will temporarily disable AutoRaise while holding the specified key. The default is control.
 
-  - mouseDelta: Requires the mouse to move a certain distance. 0.0 = most sensitive whereas higher values decrease sensitivity.
-
   - verbose: Set to true to make AutoRaise show a log of events when started in a terminal.
-    
+
 AutoRaise can read these parameters from a configuration file. To make this happen, create a **~/.AutoRaise** file or a
 **~/.config/AutoRaise/config** file. The format is as follows:
 
     #AutoRaise config file
-    pollMillis=50
-    delay=1
-    focusDelay=0
+    pollMillis=8
     warpX=0.5
     warpY=0.1
     scale=2.5
     altTaskSwitcher=false
-    requireMouseStop=true
     ignoreSpaceChanged=false
     invertDisableKey=false
     invertIgnoreApps=false
@@ -115,7 +102,6 @@ AutoRaise can read these parameters from a configuration file. To make this happ
     ignoreTitles="\\s\\| Microsoft Teams,^window$,..."
     stayFocusedBundleIds="com.apple.SecurityAgent,..."
     disableKey="control"
-    mouseDelta=0.1
 
 **AutoRaise.app usage:**
 
@@ -162,15 +148,12 @@ like so:
 
 The output should look something like this:
 
-    v5.6 by sbmpost(c) 2026, usage:
+    v6.0 by sbmpost(c) 2026, usage:
 
     AutoRaise
-      -pollMillis <20, 30, 40, 50, ...>
-      -delay <0=no-raise, 1=no-delay, 2=50ms, 3=100ms, ...>
-      -focusDelay <0=no-focus, 1=no-delay, 2=50ms, 3=100ms, ...>
+      -pollMillis <1, 2, ..., 8, ..., 50, ...>  (default 8)
       -warpX <0.5> -warpY <0.5> -scale <2.0>
       -altTaskSwitcher <true|false>
-      -requireMouseStop <true|false>
       -ignoreSpaceChanged <true|false>
       -invertDisableKey <true|false>
       -invertIgnoreApps <true|false>
@@ -178,29 +161,22 @@ The output should look something like this:
       -ignoreTitles "<Regex1, Regex2, ...>"
       -stayFocusedBundleIds "<Id1,Id2, ...>"
       -disableKey <control|option|disabled>
-      -mouseDelta <0.1>
       -verbose <true|false>
 
     Started with:
-      * pollMillis: 50ms
-      * delay: 0ms
-      * focusDelay: disabled
+      * pollMillis: 8ms
       * ignoreSpaceChanged: false
       * invertDisableKey: false
       * invertIgnoreApps: false
       * disableKey: control
       * verbose: true
 
-    Compiled with:
-      * OLD_ACTIVATION_METHOD
-      * EXPERIMENTAL_FOCUS_FIRST
-
-    2026-02-01 14:25:56.192 AutoRaise[44780:1615626] AXIsProcessTrusted: YES
-    2026-02-01 14:25:56.216 AutoRaise[44780:1615626] System cursor scale: 1.000000
-    2026-02-01 14:25:56.234 AutoRaise[44780:1615626] Got run loop source: YES
-    2026-02-01 14:25:56.284 AutoRaise[44780:1615626] Mouse window: AutoRaise — AutoRaise -verbose 1
-    2026-02-01 14:25:56.285 AutoRaise[44780:1615626] Focused window: AutoRaise — AutoRaise -verbose 1
-    2026-02-01 14:25:56.287 AutoRaise[44780:1615626] Desktop origin (-1920.000000, -360.000000)
+    2026-04-21 14:25:56.192 AutoRaise[44780:1615626] AXIsProcessTrusted: YES
+    2026-04-21 14:25:56.216 AutoRaise[44780:1615626] System cursor scale: 1.000000
+    2026-04-21 14:25:56.234 AutoRaise[44780:1615626] Got run loop source: YES
+    2026-04-21 14:25:56.284 AutoRaise[44780:1615626] Mouse window: AutoRaise — AutoRaise -verbose 1
+    2026-04-21 14:25:56.285 AutoRaise[44780:1615626] Focused window: AutoRaise — AutoRaise -verbose 1
+    2026-04-21 14:25:56.287 AutoRaise[44780:1615626] Desktop origin (-1920.000000, -360.000000)
     ...
     ...
 
