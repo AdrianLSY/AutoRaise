@@ -809,7 +809,8 @@ NSMutableDictionary *parameters = [[NSMutableDictionary alloc] init];
 
 - (void) validateParameters {
     // validate and fix wrong/absent parameters
-    if ([parameters[kPollMillis] intValue] < 1) { parameters[kPollMillis] = @"8"; }
+    if (!parameters[kPollMillis]) { parameters[kPollMillis] = @"8"; }
+    else if ([parameters[kPollMillis] intValue] < 1) { parameters[kPollMillis] = @"1"; }
     if ([parameters[kScale] floatValue] < 1) { parameters[kScale] = @"2.0"; }
     if (!parameters[kDisableKey]) { parameters[kDisableKey] = @"control"; }
     warpMouse =
@@ -939,6 +940,13 @@ void AXCallback(AXObserverRef observer, AXUIElementRef _element, CFStringRef not
 }
 
 void performRaiseCheck(CGPoint mousePoint) {
+    // Every call increments the generation counter — including calls that abort
+    // early or find no raise needed. This cancels any in-flight retries from a
+    // previous window as soon as the cursor moves onto a different area
+    // (ignored app, current frontmost, disableKey held, dock/mc active, etc.),
+    // preventing stale retries from stealing focus back to an old window.
+    uint64_t gen = ++raiseGeneration;
+
     // Corner correction (macOS 12+): direction based on delta from previous point.
     float mouse_x_diff = mousePoint.x - oldPoint.x;
     float mouse_y_diff = mousePoint.y - oldPoint.y;
@@ -1097,7 +1105,6 @@ void performRaiseCheck(CGPoint mousePoint) {
     }
 
     if (needs_raise) {
-        uint64_t gen = ++raiseGeneration;
         raiseAndActivate(_mouseWindow, mouseWindow_pid);
 
         // Schedule two retry raises for apps that don't respect the first one

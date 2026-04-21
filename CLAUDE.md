@@ -13,13 +13,11 @@ The `Makefile` targets:
 - `make` — build both binaries: `AutoRaise` (CLI) and `AutoRaise.app` (reads a config file, no GUI).
 - `make clean` — remove build outputs.
 - `make install` — copy `AutoRaise.app` into `/Applications/`.
-- `make build` — clean, then build with `-DOLD_ACTIVATION_METHOD -DEXPERIMENTAL_FOCUS_FIRST`.
-- `make run` / `make debug` — `make build` then run with `-focusDelay 1` (and `-verbose 1` for `debug`).
+- `make build` — clean, then build with `-DOLD_ACTIVATION_METHOD`.
+- `make run` / `make debug` — `make build` then run (with `-verbose 1` for `debug`).
 - `make update` — `build` + `install`.
 
-**Note:** the Makefile's `build`/`run`/`debug` targets still pass `-DEXPERIMENTAL_FOCUS_FIRST` and `-focusDelay 1`. Both are inert now: `EXPERIMENTAL_FOCUS_FIRST` is a no-op (all `#ifdef FOCUS_FIRST` blocks and SkyLight private-API decls have been removed), and `-focusDelay` is on the deprecated-flags list and emits `Warning: focusDelay is deprecated and has been removed in AutoRaise 6.0; ignoring`. The targets still work; they just produce the warning on every `make run`.
-
-Remaining compile-time flags:
+Compile-time flags:
 
 - `OLD_ACTIVATION_METHOD` — use the deprecated Carbon `SetFrontProcessWithOptions` activation path. Needed for some non-native (GTK/SDL/wine) apps; emits a deprecation warning.
 - `ALTERNATIVE_TASK_SWITCHER` — changes default for `altTaskSwitcher` to `true`; affects mouse warp behavior with non-default task switchers.
@@ -32,7 +30,7 @@ There is no test suite. Behavior is verified manually by running the binary and 
 
 Everything lives in [AutoRaise.mm](AutoRaise.mm). Banner-comment sections:
 
-1. **Globals & constants** (top) — tunables like `WINDOW_CORRECTION` (the 3px transparent border Monterey+ adds around windows), `MENUBAR_CORRECTION`, `ACTIVATE_DELAY_MS`, cursor-scale timings, plus `RAISE_RETRY_1_MS = 50`, `RAISE_RETRY_2_MS = 100`, `SUPPRESS_MS = 150`. Core event-driven state: `lastCheckTime`, `suppressRaisesUntil`, `raiseGeneration` — all driven by the `currentTimeMillis()` helper wrapping `[NSProcessInfo processInfo].systemUptime` (monotonic, never wall clock). Also the app/title denylists (`mainWindowAppsWithoutTitle`, `pwas`, `AppsRaisingOnFocus`, etc.).
+1. **Globals & constants** (top) — tunables like `WINDOW_CORRECTION` (the 3px transparent border Monterey+ adds around windows), `MENUBAR_CORRECTION`, `ACTIVATE_DELAY_MS`, cursor-scale timings, plus `RAISE_RETRY_1_MS = 50`, `RAISE_RETRY_2_MS = 100`, `SUPPRESS_MS = 150`. Core event-driven state: `lastCheckTime`, `suppressRaisesUntil`, `raiseGeneration` — all driven by the `currentTimeMillis()` helper wrapping `[NSProcessInfo processInfo].systemUptime` (monotonic, never wall clock). Also the app/title denylists (`mainWindowAppsWithoutTitle`, `pwas`, etc.).
 
 2. **Helper methods** — `get_mousewindow` → `get_raisable_window` is the recursive AX-element walker that, given a point, finds the `AXWindow`/`AXSheet`/`AXDrawer` that should be raised. `fallback` uses `CGWindowListCopyWindowInfo` when the AX API can't resolve the element. `is_main_window`, `is_full_screen`, `is_desktop_window`, `is_pwa`, `contained_within`, `titleEquals` are the predicates that decide whether a candidate window is actually raiseable.
 
@@ -44,14 +42,14 @@ Everything lives in [AutoRaise.mm](AutoRaise.mm). Banner-comment sections:
    - `spaceChanged()` — called on space change; calls `performRaiseCheck(current cursor)` directly, bypassing throttle and suppression (unless `ignoreSpaceChanged` is true).
    - `appActivated()` — handles cmd-tab warp. Sets `suppressRaisesUntil = now + SUPPRESS_MS`, does `CGWarpMouseCursorPosition`, then explicitly calls `performRaiseCheck(warpTarget)` because warp does not emit `kCGEventMouseMoved`.
    - `AXCallback()` — fires on `kAXUIElementDestroyedNotification` for the currently-hovered window.
-   - **`performRaiseCheck(CGPoint mousePoint)`** — the central raise routine. Applies screen-edge/menubar correction, runs all abort checks (button held, dock/mc active, `disableKey`, `stayFocusedBundleIds`, `ignoreApps`, `ignoreTitles`), calls `get_mousewindow`, registers the `AXObserver` for destroyed-window callbacks, compares hovered vs. frontmost. If they differ: increments `raiseGeneration` to a local `gen`, calls `raiseAndActivate`, and schedules two `dispatch_after` retries at 50ms and 100ms that each re-raise only if `gen == raiseGeneration` at execution time. This generation-counter gate is the cancellation mechanism for stale retries when the cursor has moved on.
+   - **`performRaiseCheck(CGPoint mousePoint)`** — the central raise routine. Increments `raiseGeneration` at function entry and captures the local `gen` — every call advances the generation, whether or not it issues a raise. Applies screen-edge/menubar correction, runs all abort checks (button held, dock/mc active, `disableKey`, `stayFocusedBundleIds`, `ignoreApps`, `ignoreTitles`), calls `get_mousewindow`, registers the `AXObserver` for destroyed-window callbacks, compares hovered vs. frontmost. If they differ: calls `raiseAndActivate`, and schedules two `dispatch_after` retries at 50ms and 100ms that each re-raise only if `gen == raiseGeneration` at execution time. The function-entry increment is the cancellation mechanism: any subsequent check (raise or not) invalidates pending retries, so stale retries never fire for windows the user has moved away from.
 
 6. **`eventTapHandler` + `main`** — one extended `CGEventTap` observes keyboard (`kCGEventKeyDown`, `kCGEventFlagsChanged`) **and** `kCGEventMouseMoved`. The handler dispatches by type: mouse-moved events hit the throttle (`now - lastCheckTime < pollMillis` → drop), then the suppression gate (`now < suppressRaisesUntil` → drop), then call `performRaiseCheck`. **The handler must always return `event` unmodified** — the tap is `kCGEventTapOptionListenOnly`; dropping or mutating events would break the user's mouse. Keyboard handling detects cmd-tab / cmd-grave and opens the suppression window; tap-disabled events trigger a `CGEventTapEnable(tap, true)` recovery.
 
 ### Mental model for changes
 
 - **Three entry points to `performRaiseCheck`**: the mouse-moved tap branch (throttled + suppressed), `spaceChanged()` (direct, unconditional), and post-warp in `appActivated()` (direct, bypasses suppression it just opened). When editing `performRaiseCheck`, remember all three callers.
-- **Generation counter discipline**: every new raise issuance increments `raiseGeneration`. Scheduled retries capture `gen` at schedule time and gate on `gen == raiseGeneration` at execution. Do not increment on "no raise needed" paths or the cancellation semantics break.
+- **Generation counter discipline**: `raiseGeneration` is incremented at the entry of every `performRaiseCheck` call — including calls that abort early or find no raise needed. Scheduled retries capture `gen` at schedule time and gate on `gen == raiseGeneration` at execution. Incrementing on every call (not only on raise-issuing calls) is load-bearing: it's what causes stale retries to self-cancel when the cursor moves onto an ignored app, the current frontmost, or any other non-raising area.
 - **Never wall clock**: all timing uses `currentTimeMillis()` (monotonic via `systemUptime`). Adding a new deadline? Use the same helper.
 - **Coordinate system gotcha**: screen Y is flipped between AppKit (origin bottom-left) and Core Graphics (origin top-left). `findDesktopOrigin`, `findScreen`, and the correction logic in `performRaiseCheck` all juggle this — follow existing patterns rather than inventing new ones.
 - **CF/AX memory**: the code uses manual `CFRelease` throughout (the file is compiled with `-fobjc-arc` but ARC doesn't cover Core Foundation types). New AX/CF code must follow Create/Get rule discipline; leaks here will accumulate across every event.
