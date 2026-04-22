@@ -1052,11 +1052,12 @@ void performRaiseCheck(CGPoint mousePoint) {
                 );
             } else {
                 // Observer creation failed (e.g., app exited between PID lookup
-                // and observer setup). Skip destroyed-window tracking for this
-                // hover; the next raise-check will retry with the then-current
-                // mouse window.
+                // and observer setup). Reset previous_id so the next raise-check
+                // over the same window retries observer setup instead of being
+                // skipped by the mouseWindow_id != previous_id guard above.
                 if (verbose) { NSLog(@"AXObserverCreate failed"); }
                 axObserver = NULL;
+                previous_id = kCGNullWindowID;
             }
         }
     } else if (verbose) { NSLog(@"Mouse window not present"); }
