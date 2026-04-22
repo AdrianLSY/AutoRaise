@@ -1011,6 +1011,7 @@ void performRaiseCheck(CGPoint mousePoint) {
 
     pid_t mouseWindow_pid;
     if (AXUIElementGetPid(_mouseWindow, &mouseWindow_pid) != kAXErrorSuccess) {
+        if (verbose) { NSLog(@"No pid for mouse window"); }
         CFRelease(_mouseWindow);
         return;
     }
@@ -1056,7 +1057,6 @@ void performRaiseCheck(CGPoint mousePoint) {
                 // over the same window retries observer setup instead of being
                 // skipped by the mouseWindow_id != previous_id guard above.
                 if (verbose) { NSLog(@"AXObserverCreate failed"); }
-                axObserver = NULL;
                 previous_id = kCGNullWindowID;
             }
         }
@@ -1107,6 +1107,7 @@ void performRaiseCheck(CGPoint mousePoint) {
                 // raise rather than risk re-activating the already-focused
                 // window (contained_within uses strict bounds, so identical
                 // windows would otherwise fall through to a spurious raise).
+                if (verbose) { NSLog(@"No window id for focused window"); }
                 needs_raise = false;
             }
             CFRelease(_focusedWindow);
