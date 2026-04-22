@@ -1011,12 +1011,17 @@ void performRaiseCheck(CGPoint mousePoint) {
 
     pid_t mouseWindow_pid;
     if (AXUIElementGetPid(_mouseWindow, &mouseWindow_pid) != kAXErrorSuccess) {
+        if (verbose) { NSLog(@"No pid for mouse window"); }
         CFRelease(_mouseWindow);
         return;
     }
 
-    CGWindowID mouseWindow_id;
-    _AXUIElementGetWindow(_mouseWindow, &mouseWindow_id);
+    CGWindowID mouseWindow_id = kCGNullWindowID;
+    if (_AXUIElementGetWindow(_mouseWindow, &mouseWindow_id) != kAXErrorSuccess) {
+        if (verbose) { NSLog(@"No window id for mouse window"); }
+        CFRelease(_mouseWindow);
+        return;
+    }
     bool mouseWindowPresent = mouseWindow_id != lastDestroyedMouseWindow_id;
 
     if (mouseWindowPresent) {
@@ -1030,24 +1035,30 @@ void performRaiseCheck(CGPoint mousePoint) {
                 axObserver = NULL;
             }
 
-            AXObserverCreate(
-                mouseWindow_pid,
-                AXCallback,
-                &axObserver
-            );
+            if (AXObserverCreate(
+                    mouseWindow_pid,
+                    AXCallback,
+                    &axObserver) == kAXErrorSuccess && axObserver) {
+                AXObserverAddNotification(
+                    axObserver,
+                    _mouseWindow,
+                    kAXUIElementDestroyedNotification,
+                    (void *) ((uint64_t) mouseWindow_id)
+                );
 
-            AXObserverAddNotification(
-                axObserver,
-                _mouseWindow,
-                kAXUIElementDestroyedNotification,
-                (void *) ((uint64_t) mouseWindow_id)
-            );
-
-            CFRunLoopAddSource(
-                CFRunLoopGetCurrent(),
-                AXObserverGetRunLoopSource(axObserver),
-                kCFRunLoopCommonModes
-            );
+                CFRunLoopAddSource(
+                    CFRunLoopGetCurrent(),
+                    AXObserverGetRunLoopSource(axObserver),
+                    kCFRunLoopCommonModes
+                );
+            } else {
+                // Observer creation failed (e.g., app exited between PID lookup
+                // and observer setup). Reset previous_id so the next raise-check
+                // over the same window retries observer setup instead of being
+                // skipped by the mouseWindow_id != previous_id guard above.
+                if (verbose) { NSLog(@"AXObserverCreate failed"); }
+                previous_id = kCGNullWindowID;
+            }
         }
     } else if (verbose) { NSLog(@"Mouse window not present"); }
 
@@ -1086,10 +1097,19 @@ void performRaiseCheck(CGPoint mousePoint) {
             (CFTypeRef *) &_focusedWindow);
         if (_focusedWindow) {
             if (verbose) { logWindowTitle(@"Focused window", _focusedWindow); }
-            CGWindowID focusedWindow_id;
-            _AXUIElementGetWindow(_focusedWindow, &focusedWindow_id);
-            needs_raise = mouseWindow_id != focusedWindow_id;
-            needs_raise = needs_raise && !contained_within(_focusedWindow, _mouseWindow);
+            CGWindowID focusedWindow_id = kCGNullWindowID;
+            if (_AXUIElementGetWindow(_focusedWindow, &focusedWindow_id) == kAXErrorSuccess) {
+                needs_raise = mouseWindow_id != focusedWindow_id;
+                needs_raise = needs_raise && !contained_within(_focusedWindow, _mouseWindow);
+            } else {
+                // Focused window's ID could not be read; we can't verify
+                // whether it's the same window the mouse is over. Skip the
+                // raise rather than risk re-activating the already-focused
+                // window (contained_within uses strict bounds, so identical
+                // windows would otherwise fall through to a spurious raise).
+                if (verbose) { NSLog(@"No window id for focused window"); }
+                needs_raise = false;
+            }
             CFRelease(_focusedWindow);
         } else {
             if (verbose) { NSLog(@"No focused window"); }
